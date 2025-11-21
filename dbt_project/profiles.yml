@@ -1,0 +1,12 @@
+pgduckdb_project:
+  target: dev
+  outputs:
+    dev:
+      type: postgres
+      host: pgduckdb
+      port: 5432
+      user: postgres
+      pass: duckdb
+      dbname: postgres
+      schema: public
+      threads: 4

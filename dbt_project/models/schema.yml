@@ -1,0 +1,33 @@
+version: 2
+
+models:
+  - name: example
+    description: "Пример таблицы"
+    columns:
+      - name: id
+        description: "Первичный ключ"
+        tests:
+          - not_null
+          - unique
+      - name: message
+        description: "Текстовое сообщение"
+        tests:
+          - not_null
+
+  - name: users
+    description: "Таблица пользователей"
+    columns:
+      - name: user_id
+        description: "ID пользователя"
+        tests:
+          - not_null
+          - unique
+      - name: name
+        description: "Имя пользователя"
+        tests:
+          - not_null
+      - name: email
+        description: "Email пользователя"
+        tests:
+          - not_null
+          - unique

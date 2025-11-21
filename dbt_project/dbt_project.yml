@@ -1,0 +1,25 @@
+name: 'pgduckdb_project'
+version: '1.0.0'
+config-version: 2
+
+profile: 'pgduckdb_project'
+
+model-paths: ["models"]
+analysis-paths: ["analyses"]
+test-paths: ["tests"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+
+target-path: "target"
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+models:
+  pgduckdb_project:
+    materialized: table
+
+# Обновляем конфигурацию для нового пакета
+vars:
+  dbt_utils_dispatch_list: ['dbt_utils_core']

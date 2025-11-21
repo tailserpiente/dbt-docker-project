@@ -1,0 +1,40 @@
+services:
+  pgduckdb:
+    image: pgduckdb/pgduckdb:18-main
+    container_name: pgduckdb
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_PASSWORD: duckdb
+      POSTGRES_USER: postgres
+      POSTGRES_DB: postgres
+    volumes:
+      - pgduckdb_data:/var/lib/postgresql
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres || exit 0"]  # Более мягкий healthcheck
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  dbt:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dbt-pgduckdb
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./dbt_project:/usr/app
+    working_dir: /usr/app
+    environment:
+      DBT_PROFILES_DIR: /usr/app
+      DATABASE_URL: "postgresql://postgres:duckdb@pgduckdb:5432/postgres"
+    depends_on:
+      - pgduckdb
+    entrypoint: ["/bin/sh", "-c"]  # Переопределяем entrypoint
+    command: ["sleep infinity"]    # Теперь sleep будет выполняться через shell
+
+volumes:
+  pgduckdb_data:

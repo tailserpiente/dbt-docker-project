@@ -1,0 +1,28 @@
+# DBT
+target/
+dbt_packages/
+logs/
+*.db
+*.sqlite3
+
+# Docker
+.env
+.dockerignore
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+pip-log.txt
