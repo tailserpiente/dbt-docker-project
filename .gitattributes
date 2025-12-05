@@ -1,0 +1,9 @@
+# Установить для всех текстовых файлов автоматическое определение
+* text=auto
+
+# Явно указать для определенных типов файлов
+*.sh text eol=lf
+*.md text
+*.yml text
+Dockerfile text
+.gitignore text
