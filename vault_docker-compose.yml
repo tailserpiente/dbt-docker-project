@@ -1,0 +1,199 @@
+
+# Используем существующую сеть
+networks:
+  lakehouse-network:
+    external: true
+    name: lakehouse-network
+
+services:
+  # Vault сервисы (импортируем из отдельного файла)
+  vault:
+    extends:
+      file: ./vault/docker-compose.yml
+      service: vault
+
+  vault-agent:
+    extends:
+      file: ./vault/docker-compose.yml
+      service: vault-agent
+
+  # PostgreSQL + DuckDB
+  pgduckdb:
+    image: pgduckdb/pgduckdb:18-main
+    container_name: pgduckdb
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_DB: postgres
+      # Пароль загружается через entrypoint
+    volumes:
+      - pgduckdb_data:/var/lib/postgresql
+      - /mnt/d/lakehouse:/lakehouse:rw
+      - ./secrets:/run/secrets:ro
+      - ./scripts/wait-for-vault.sh:/scripts/wait-for-vault.sh:ro
+    restart: unless-stopped
+    entrypoint: >
+      sh -c "
+      # Ждем готовности Vault Agent
+      /scripts/wait-for-vault.sh vault-agent 8200 60
+      
+      # Загружаем секреты
+      if [ -f /run/secrets/postgres.env ]; then
+        source /run/secrets/postgres.env
+        echo 'Using Vault secrets for PostgreSQL'
+      else
+        export POSTGRES_PASSWORD=duckdb
+        echo 'Using default password for PostgreSQL'
+      fi
+      
+      # Запускаем PostgreSQL
+      exec docker-entrypoint.sh postgres
+      "
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres || exit 0"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    depends_on:
+      vault-agent:
+        condition: service_started
+    networks:
+      - lakehouse-network
+
+  # MS SQL Server
+  mssql:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: mssql-server
+    environment:
+      ACCEPT_EULA: Y
+      MSSQL_PID: Developer
+      # Пароль загружается через entrypoint
+    ports:
+      - "1433:1433"
+    volumes:
+      - mssql_data:/var/opt/mssql
+      - /mnt/d/lakehouse:/lakehouse:rw
+      - ./secrets:/run/secrets:ro
+      - ./scripts/wait-for-vault.sh:/scripts/wait-for-vault.sh:ro
+    restart: unless-stopped
+    entrypoint: >
+      /bin/bash -c "
+      # Ждем готовности Vault Agent
+      /scripts/wait-for-vault.sh vault-agent 8200 60
+      
+      # Загружаем секреты
+      if [ -f /run/secrets/mssql.env ]; then
+        source /run/secrets/mssql.env
+        echo 'Using Vault secrets for MSSQL'
+      else
+        export MSSQL_SA_PASSWORD=mssql123@Pwd
+        echo 'Using default password for MSSQL'
+      fi
+      
+      # Запускаем MSSQL
+      /opt/mssql/bin/sqlservr
+      "
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools/bin/sqlcmd -S localhost -U SA -P mssql123@Pwd -Q 'SELECT 1' || exit 0"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    depends_on:
+      vault-agent:
+        condition: service_started
+    networks:
+      - lakehouse-network
+
+  # Analytical Engine
+  duckdb:
+    image: duckdb/duckdb:latest
+    container_name: duckdb-engine
+    volumes:
+      - ./lakehouse:/lakehouse_local:rw
+      - /mnt/d/lakehouse:/lakehouse:rw
+      - ./scripts:/scripts
+      - ./secrets:/run/secrets:ro
+    working_dir: /lakehouse
+    environment:
+      VAULT_ADDR: http://vault:8200
+    stdin_open: true
+    tty: true
+    deploy:
+      resources:
+        limits:
+          memory: 6G
+        reservations:
+          memory: 4G
+    entrypoint: >
+      /bin/sh -c "
+      echo 'DuckDB готов к работе с секретами из Vault'
+      if [ -f /run/secrets/duckdb_config.json ]; then
+        echo 'Конфиг загружен из Vault'
+        cat /run/secrets/duckdb_config.json
+      fi
+      exec /bin/sh
+      "
+    depends_on:
+      vault-agent:
+        condition: service_started
+    networks:
+      - lakehouse-network
+
+  # DBT
+  dbt:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dbt-pgduckdb
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./dbt_project:/usr/app
+      - ./secrets:/run/secrets:ro
+    working_dir: /usr/app
+    environment:
+      DBT_PROFILES_DIR: /usr/app
+      # DATABASE_URL будет загружен из профиля
+    entrypoint: >
+      /bin/sh -c "
+      # Проверяем наличие обновленного profiles.yml
+      if [ -f /usr/app/profiles.yml ]; then
+        echo 'Using Vault-managed DBT profile'
+      else
+        echo 'Using default DBT profile'
+        cat > /usr/app/profiles.yml << 'EOF'
+        lakehouse:
+          target: dev
+          outputs:
+            dev:
+              type: postgres
+              host: pgduckdb
+              port: 5432
+              user: postgres
+              pass: 'duckdb'
+              dbname: postgres
+              schema: analytics
+              threads: 4
+        EOF
+      fi
+      
+      echo 'Starting DBT container...'
+      sleep infinity
+      "
+    depends_on:
+      pgduckdb:
+        condition: service_healthy
+      vault-agent:
+        condition: service_started
+    networks:
+      - lakehouse-network
+
+volumes:
+  pgduckdb_data:
+    driver: local
+  mssql_data:
+    driver: local
+

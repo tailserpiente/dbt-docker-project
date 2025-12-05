@@ -1,0 +1,26 @@
+{{- with secret "database/creds/pgduckdb-role" -}}
+{
+  "connections": {
+    "postgres": {
+      "type": "postgres",
+      "host": "pgduckdb",
+      "port": 5432,
+      "database": "postgres",
+      "user": "postgres",
+      "password": "{{ .Data.password }}"
+    },
+    "mssql": {
+      {{- with secret "database/creds/mssql-role" }}
+      "type": "sqlserver",
+      "host": "mssql",
+      "port": 1433,
+      "database": "master",
+      "user": "sa",
+      "password": "{{ .Data.password }}",
+      {{- end }}
+      "trust_server_certificate": true
+    }
+  },
+  "warehouse": "/lakehouse/data.duckdb"
+}
+{{- end }}

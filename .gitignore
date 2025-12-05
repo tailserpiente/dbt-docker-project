@@ -1,3 +1,15 @@
+# Секретные файлы
+.env
+*.secret
+vault_data/
+secrets/
+.vault/
+
+# Docker volumes
+**/pgduckdb_data/
+**/mssql_data/
+**/vault_data/
+
 # DBT
 target/
 dbt_packages/

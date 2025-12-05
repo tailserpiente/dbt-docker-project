@@ -1,4 +1,5 @@
-pgduckdb_project:
+{{- with secret "database/creds/pgduckdb-role" -}}
+lakehouse:
   target: dev
   outputs:
     dev:
@@ -6,7 +7,9 @@ pgduckdb_project:
       host: pgduckdb
       port: 5432
       user: postgres
-      pass: "{{ env_var('PG_PASSWORD') }}"  # <-- Используем переменную окружения
+      pass: '{{ .Data.password }}'
       dbname: postgres
-      schema: public
+      schema: analytics
       threads: 4
+      retries: 3
+{{- end }}

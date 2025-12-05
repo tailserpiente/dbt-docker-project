@@ -1,0 +1,89 @@
+
+services:
+  vault:
+    image: hashicorp/vault:latest
+    container_name: vault
+    restart: unless-stopped
+    ports:
+      - "8200:8200"
+      - "8201:8201"
+    environment:
+      VAULT_ADDR: "http://0.0.0.0:8200"
+      VAULT_API_ADDR: "http://0.0.0.0:8200"
+      VAULT_CLUSTER_ADDR: "https://0.0.0.0:8201"
+      VAULT_UI: "true"
+      VAULT_RAFT_NODE_ID: "node1"
+      VAULT_SKIP_VERIFY: "true"
+    volumes:
+      # ЗАМЕНА: Используем именованный volume вместо bind mount для config
+      - vault_config:/vault/config
+      # УЖЕ ИМЕНОВАННЫЙ: Оставляем как есть
+      - vault_data:/vault/data
+      # УЖЕ ИМЕНОВАННЫЙ: Оставляем как есть
+      - vault_logs:/vault/logs
+      # ЗАМЕНА: Используем именованный volume для secrets вместо ../secrets
+      - vault_secrets:/vault/secrets
+    cap_add:
+      - IPC_LOCK
+    command: server -config=/vault/config/vault.hcl
+    networks:
+      lakehouse-network:
+        aliases:
+          - vault.lakehouse.local
+    healthcheck:
+      test: ["CMD", "vault", "status", "-format=json"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  vault-agent:
+    image: hashicorp/vault:latest
+    container_name: vault-agent
+    restart: unless-stopped
+    volumes:
+      # ЗАМЕНА: Используем именованный volume для agent конфигурации
+      - vault_agent:/vault/agent
+      # ЗАМЕНА: Используем тот же именованный volume для secrets
+      - vault_secrets:/secrets
+      # ОСТАВЛЯЕМ: Этот bind mount может работать, т.к. /mnt/d/ обычно правильно настроен в WSL2
+      - /mnt/d/lakehouse:/lakehouse:rw  # Убираем :shared, достаточно rw
+      # ЗАМЕНА: Используем именованный volume для dbt_project
+      - dbt_project_volume:/dbt_project
+    environment:
+      VAULT_ADDR: "http://vault:8200"
+      VAULT_SKIP_VERIFY: "true"
+    command: >
+      agent -config=/vault/agent/agent.hcl -log-level=info
+    depends_on:
+      vault:
+        condition: service_healthy
+    networks:
+      lakehouse-network:
+        aliases:
+          - vault-agent.lakehouse.local
+
+networks:
+  lakehouse-network:
+    name: lakehouse-network
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/24
+
+volumes:
+  # ИМЕНОВАННЫЕ VOLUMES вместо bind mounts:
+  vault_config:  # Для конфигурационных файлов Vault
+    driver: local
+  vault_data:    # Для данных Vault (оставляем)
+    driver: local
+  vault_logs:    # Для логов Vault (оставляем)
+    driver: local
+  vault_secrets: # Для секретов (общий volume для vault и vault-agent)
+    driver: local
+  vault_agent:   # Для конфигов агента
+    driver: local
+  dbt_project_volume: # Для DBT проекта
+    driver: local
+
+
