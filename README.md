@@ -43,15 +43,56 @@ cd dbt-docker-project
 
 docker compose up -d --build
 
-# Запуск Vault
+#-------------------------------------------------------
+# Запуск Vault - DEV без сохранения паролей 
 docker compose -f docker-compose-vault.yml -p vault up -d
 
-# Остановка Vault
+# Остановка Vault - DEV 
 docker compose -f docker-compose-vault.yml -p vault down
 
 # Просмотр логов Vault
 docker logs vault
 docker logs vault-agent
+
+#-------------------------------------------------------
+#-- Запуск Vault - PROD с инициализацией хранилища паролей 
+#------------------------------------------------------- 
+# Запуск Vault - PROD
+docker compose -f docker-compose-vault-prod.yml -p vault up vault -d
+
+###### Разовая инициализация vault - выдача прав на именованные директории в WSL 
+mkdir vault_data vault_logs
+sudo chown -R 100:1000 vault_data vault_logs
+sudo chmod -R 775 vault_data vault_logs
+
+docker exec vault vault operator init
+# записать ключи в безопасное место 
+
+docker exec -it vault vault operator unseal
+docker exec -it vault vault operator unseal
+docker exec -it vault vault operator unseal
+
+docker exec vault vault status
+
+echo "ваш_root_token_здесь" > vault_token.txt
+    volumes:
+      - ./agent-config.hcl:/etc/vault/config.hcl:ro
+      - ./vault_token.txt:/etc/vault/token:ro  # <-- ДОБАВЬТЕ ЭТУ СТРОКУ в yml для agent
+
+docker compose -f docker-compose-vault-prod.yml -p vault up vault-agent -d
+
+#######
+
+
+
+
+# Остановка Vault - DEV 
+docker compose -f docker-compose-vault-prod.yml -p vault down
+
+# Просмотр логов Vault
+docker logs vault
+docker logs vault-agent
+#--------------------------------------------------------
 
 ## Установка приложений
 

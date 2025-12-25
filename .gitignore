@@ -4,6 +4,8 @@
 vault_data/
 secrets/
 .vault/
+vault_token.txt
+
 
 # Docker volumes
 **/pgduckdb_data/
